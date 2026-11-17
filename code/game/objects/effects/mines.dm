@@ -5,6 +5,7 @@
 	icon_state = "uglyminearmed"
 	var/triggered = 0
 	var/faction = "syndicate"
+	var/destroy_on_ex = TRUE
 
 /obj/effect/mine/Initialize(mapload)
 	. = ..()
@@ -29,7 +30,7 @@
 	if(arrived.movement_type & MOVETYPES_NOT_TOUCHING_GROUND)
 		return
 
-	if(faction && (faction in arrived.faction))
+	if(faction && (faction in arrived.faction) || HAS_TRAIT(arrived, TRAIT_MINE_TRIGGERER))
 		return
 
 	triggermine(arrived)
@@ -40,12 +41,20 @@
 	visible_message(span_danger("[victim] sets off [get_examine_icon(viewers(src))] [src]!"))
 	do_sparks(3, TRUE, src)
 	mineEffect(victim)
-	triggered = 1
+	triggered = TRUE
+	mark_mine_triggerer(victim, src)
+	SEND_SIGNAL(src, COMSIG_MINE_TRIGGERED, victim)
 	qdel(src)
+
+/proc/mark_mine_triggerer(mob/living/victim, atom/source)
+	ADD_TRAIT(victim, TRAIT_MINE_TRIGGERER, UNIQUE_TRAIT_SOURCE(source))
+	addtimer(TRAIT_CALLBACK_REMOVE(victim, TRAIT_MINE_TRIGGERER, UNIQUE_TRAIT_SOURCE(source)), 0.5 SECONDS)
 
 /obj/effect/mine/ex_act(severity, target)
 	// Necessary because, as effects, they have infinite health, and wouldn't be destroyed otherwise.
 	// Also, they're pressure-sensitive mines, it makes sense that an explosion (wave of pressure) triggers/destroys them.
+	if(!destroy_on_ex)
+		return
 	qdel(src)
 
 /obj/effect/mine/explosive
@@ -58,6 +67,16 @@
 /obj/effect/mine/explosive/mineEffect(mob/living/victim)
 	add_attack_logs(victim, src, "Stepped on")
 	explosion(loc, devastation_range = range_devastation, heavy_impact_range = range_heavy, light_impact_range = range_light, flash_range = range_flash)
+
+/obj/effect/mine/explosive/lavaland
+	level = 1
+	invisibility = INVISIBILITY_ANOMALY
+	destroy_on_ex = FALSE
+	range_heavy = 0
+
+/obj/effect/mine/explosive/lavaland/ComponentInitialize()
+	AddComponent(/datum/component/pellet_cloud, projectile_type = /obj/projectile/shrapnel/mine, magnitude = 1)
+	return ..()
 
 /obj/effect/mine/stun
 	name = "stun mine"
